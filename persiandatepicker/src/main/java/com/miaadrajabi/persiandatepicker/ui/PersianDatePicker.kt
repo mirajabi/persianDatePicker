@@ -1,12 +1,17 @@
 package com.miaadrajabi.persiandatepicker.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -31,14 +36,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -54,6 +64,7 @@ import com.miaadrajabi.persiandatepicker.ui.theme.PersianFonts
 import com.miaadrajabi.persiandatepicker.utils.PersianCalendar
 import com.miaadrajabi.persiandatepicker.utils.PersianDate
 import java.util.Date
+import kotlin.math.abs
 
 enum class SelectionMode {
     SINGLE,
@@ -137,6 +148,7 @@ data class PersianDatePickerStyle(
     val weekdayFontSize: TextUnit = 14.sp,
     val dayFontSize: TextUnit = 14.sp,
     val buttonTextSize: TextUnit = 16.sp,
+    val todayButtonTextSize: TextUnit = 13.sp,
     // Selection summary footer
     val selectionFooterBackgroundColor: Color = Color(0xFF2196F3).copy(alpha = 0.1f),
     val selectionFooterTextColor: Color = Color(0xFF333333),
@@ -180,6 +192,7 @@ data class PersianDatePickerConfig(
     val rangeTitleText: String?,
     val showSelectionSummaryFooter: Boolean,
     val enableYearPicker: Boolean,
+    val repeatRangeLightAnimation: Boolean = false,
 )
 
 class PersianDatePickerBuilder {
@@ -209,6 +222,7 @@ class PersianDatePickerBuilder {
     private var rangeTitleText: String? = null
     private var showSelectionSummaryFooter: Boolean = true
     private var enableYearPicker: Boolean = true
+    private var repeatRangeLightAnimation: Boolean = false
 
     fun selectionMode(mode: SelectionMode) = apply { this.selectionMode = mode }
     fun presentation(style: PresentationStyle) = apply { this.presentationStyle = style }
@@ -238,6 +252,7 @@ class PersianDatePickerBuilder {
     fun rangeTitle(text: String?) = apply { this.rangeTitleText = text }
     fun showSelectionSummaryFooter(show: Boolean) = apply { this.showSelectionSummaryFooter = show }
     fun enableYearPicker(enable: Boolean) = apply { this.enableYearPicker = enable }
+    fun repeatRangeLightAnimation(repeat: Boolean) = apply { this.repeatRangeLightAnimation = repeat }
 
     fun build(): PersianDatePickerConfig {
         return PersianDatePickerConfig(
@@ -267,6 +282,7 @@ class PersianDatePickerBuilder {
             rangeTitleText = rangeTitleText,
             showSelectionSummaryFooter = showSelectionSummaryFooter,
             enableYearPicker = enableYearPicker,
+            repeatRangeLightAnimation = repeatRangeLightAnimation,
         )
     }
 }
@@ -374,6 +390,21 @@ private fun PersianDatePickerCard(
     var selectedDates by remember { mutableStateOf(config.initialSelectedDates.toSet()) }
     var singleDate by remember { mutableStateOf(config.initialSelectedDates.firstOrNull()) }
     val today = PersianDate.toPersianDate(Date())
+    val rangeLightProgress = remember { Animatable(-0.18f) }
+    LaunchedEffect(dateRange.startDate, dateRange.endDate, config.repeatRangeLightAnimation) {
+        if (dateRange.startDate != null && dateRange.endDate != null) {
+            do {
+                rangeLightProgress.snapTo(-0.18f)
+                rangeLightProgress.animateTo(
+                    targetValue = 1.18f,
+                    animationSpec = tween(durationMillis = 3000, easing = LinearEasing)
+                )
+            } while (config.repeatRangeLightAnimation)
+        } else {
+            rangeLightProgress.snapTo(-0.18f)
+        }
+    }
+    var showMonthPicker by remember { mutableStateOf(false) }
     var showYearPicker by remember { mutableStateOf(false) }
 
     var cardModifier = Modifier
@@ -428,10 +459,10 @@ private fun PersianDatePickerCard(
                 .padding(horizontal = config.contentPaddingHorizontal, vertical = config.contentPaddingVertical)
         ) {
             // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(config.style.closeButtonSize)
             ) {
                 val defaultTitleSingle = "انتخاب تاریخ"
                 val defaultTitleMultiple = "انتخاب چند تاریخ"
@@ -447,28 +478,35 @@ private fun PersianDatePickerCard(
                 }
                 Text(
                     text = headerText,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth()
+                        .padding(horizontal = config.style.closeButtonSize + 8.dp),
                     fontSize = config.style.titleFontSize,
                     fontWeight = FontWeight.Bold,
                     color = titleColor,
                     fontFamily = PersianFonts.Bold,
+                    textAlign = TextAlign.Center,
                     style = TextStyle(textDirection = TextDirection.ContentOrRtl)
                 )
 
                 Box(
                     modifier = Modifier
+                        .align(AbsoluteAlignment.TopRight)
                         .size(config.style.closeButtonSize)
                         .background(color = config.style.closeButtonBackground, shape = CircleShape)
                         .clip(CircleShape)
                         .clickable {
-                            if (showYearPicker) {
+                            if (showYearPicker || showMonthPicker) {
                                 showYearPicker = false
+                                showMonthPicker = false
                             } else {
                                 onDismiss()
                             }
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    val closeIcon = if (showYearPicker) "‹" else "×"
+                    val closeIcon = if (showYearPicker || showMonthPicker) "‹" else "×"
                     Text(
                         text = closeIcon,
                         fontSize = config.style.titleFontSize,
@@ -484,10 +522,10 @@ private fun PersianDatePickerCard(
             // Month navigation / Year picker
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = if (showYearPicker) Arrangement.Center else Arrangement.SpaceBetween,
+                horizontalArrangement = if (showYearPicker || showMonthPicker) Arrangement.Center else Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (!showYearPicker) {
+                if (!showYearPicker && !showMonthPicker) {
                     Box(
                         modifier = Modifier
                             .size(config.style.navButtonSize)
@@ -515,7 +553,10 @@ private fun PersianDatePickerCard(
                             fontWeight = FontWeight.Bold,
                             color = config.style.monthTitleTextColor,
                             fontFamily = PersianFonts.Bold,
-                            style = TextStyle(textDirection = TextDirection.ContentOrRtl)
+                            style = TextStyle(textDirection = TextDirection.ContentOrRtl),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(config.style.yearPickerCornerRadius))
+                                .clickable { showMonthPicker = true }
                         )
                         Text(
                             text = PersianDate.toPersianNumber(persianDate.year),
@@ -572,10 +613,23 @@ private fun PersianDatePickerCard(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
+            if (showMonthPicker) {
+                Spacer(modifier = Modifier.height(12.dp))
+                MonthPickerGrid(
+                    currentMonth = currentPersianCalendar.getMonth(),
+                    style = config.style,
+                    onMonthSelected = { month ->
+                        currentPersianCalendar = PersianCalendar(currentPersianCalendar.getYear(), month, 1)
+                        showMonthPicker = false
+                    }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             // Week headers (hide when year picker is visible)
-            if (!showYearPicker) {
+            if (!showYearPicker && !showMonthPicker) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -598,7 +652,7 @@ private fun PersianDatePickerCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (!showYearPicker) {
+            if (!showYearPicker && !showMonthPicker) {
                 val firstDayOfWeek = currentPersianCalendar.getFirstDayOfWeekInMonth()
                 val daysInMonth = currentPersianCalendar.getDaysInCurrentMonth()
 
@@ -606,7 +660,9 @@ private fun PersianDatePickerCard(
                     columns = GridCells.Fixed(7),
                     modifier = Modifier.height(config.style.gridHeight),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    // Day cells draw the range connector up to their column edges.
+                    // Keeping the grid gap at zero makes that connector continuous.
+                    horizontalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
                     items(firstDayOfWeek) {
                         Spacer(modifier = Modifier.size(36.dp))
@@ -634,6 +690,35 @@ private fun PersianDatePickerCard(
                         val isRangeStart = config.selectionMode == SelectionMode.RANGE && dateRange.startDate?.isSameDay(date) == true
                         val isRangeEnd = config.selectionMode == SelectionMode.RANGE && dateRange.endDate?.isSameDay(date) == true
                         val isInRange = config.selectionMode == SelectionMode.RANGE && isDateBetween(date, dateRange.startDate, dateRange.endDate)
+                        val isSingleDayRange = isRangeStart && isRangeEnd
+                        val gridPosition = firstDayOfWeek + dayIndex
+                        val hasPreviousDayInRow = gridPosition % 7 != 0
+                        val hasNextDayInRow = gridPosition % 7 != 6
+                        val connectsToPrevious = config.selectionMode == SelectionMode.RANGE &&
+                            dateRange.endDate != null &&
+                            !isSingleDayRange &&
+                            hasPreviousDayInRow &&
+                            (isInRange || isRangeEnd)
+                        val connectsToNext = config.selectionMode == SelectionMode.RANGE &&
+                            dateRange.endDate != null &&
+                            !isSingleDayRange &&
+                            hasNextDayInRow &&
+                            (isInRange || isRangeStart)
+                        val rangeStartMillis = dateRange.startDate?.let { PersianDate.fromPersianDate(it).time }
+                        val rangeEndMillis = dateRange.endDate?.let { PersianDate.fromPersianDate(it).time }
+                        val dateMillis = PersianDate.fromPersianDate(date).time
+                        val positionInRange = when {
+                            isSingleDayRange -> 0.5f
+                            rangeStartMillis != null && rangeEndMillis != null && rangeEndMillis > rangeStartMillis ->
+                                ((dateMillis - rangeStartMillis).toFloat() /
+                                    (rangeEndMillis - rangeStartMillis).toFloat()).coerceIn(0f, 1f)
+                            else -> -1f
+                        }
+                        val shimmerIntensity = if (
+                            (isRangeStart || isRangeEnd || isInRange) && positionInRange >= 0f
+                        ) {
+                            (1f - abs(rangeLightProgress.value - positionInRange) / 0.18f).coerceIn(0f, 1f)
+                        } else 0f
 
                         PersianDayCell(
                             date = date,
@@ -642,6 +727,10 @@ private fun PersianDatePickerCard(
                             isRangeStart = isRangeStart,
                             isRangeEnd = isRangeEnd,
                             isInRange = isInRange,
+                            isSingleDayRange = isSingleDayRange,
+                            connectsToPrevious = connectsToPrevious,
+                            connectsToNext = connectsToNext,
+                            shimmerIntensity = shimmerIntensity,
                             onClick = {
                                 when (config.selectionMode) {
                                     SelectionMode.SINGLE -> {
@@ -678,7 +767,7 @@ private fun PersianDatePickerCard(
             Spacer(modifier = Modifier.height(20.dp))
 
             // Selection summary footer (hide when year picker is visible)
-            if (config.showSelectionSummaryFooter && !showYearPicker) {
+            if (config.showSelectionSummaryFooter && !showYearPicker && !showMonthPicker) {
                 val footerText = when (config.selectionMode) {
                     SelectionMode.SINGLE -> singleDate?.getFormattedDate() ?: ""
                     SelectionMode.MULTIPLE -> if (selectedDates.isNotEmpty()) {
@@ -707,7 +796,7 @@ private fun PersianDatePickerCard(
             // Actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 TextButton(
                     onClick = onDismiss,
@@ -763,17 +852,18 @@ private fun PersianDatePickerCard(
                             config.onTodayClick?.invoke(todayLocal)
                         },
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(0.8f)
                             .height(config.style.buttonHeight),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = config.style.todayButtonBackground,
                             contentColor = config.style.todayButtonTextColor
                         ),
-                        shape = RoundedCornerShape(config.style.todayButtonCornerRadius)
+                        shape = RoundedCornerShape(config.style.todayButtonCornerRadius),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                     ) {
                         Text(
                             text = config.todayButtonText,
-                            fontSize = config.style.buttonTextSize,
+                            fontSize = config.style.todayButtonTextSize,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = PersianFonts.Regular,
                             color = config.style.todayButtonTextColor,
@@ -871,6 +961,55 @@ private fun SelectionFooter(
 }
 
 @Composable
+private fun MonthPickerGrid(
+    currentMonth: Int,
+    style: PersianDatePickerStyle,
+    onMonthSelected: (Int) -> Unit,
+) {
+    val months = PersianDate.PERSIAN_MONTHS
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(style.yearPickerBackgroundColor)
+            .padding(4.dp)
+    ) {
+        repeat(4) { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                repeat(3) { column ->
+                    val month = row * 3 + column + 1
+                    val selected = month == currentMonth
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .clip(RoundedCornerShape(style.yearPickerCornerRadius))
+                            .background(
+                                if (selected) style.yearPickerSelectedBackgroundColor
+                                else style.yearPickerItemBackgroundColor
+                            )
+                            .clickable { onMonthSelected(month) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = months[month - 1],
+                            fontSize = 13.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selected) style.yearPickerSelectedTextColor else style.yearPickerTextColor,
+                            fontFamily = PersianFonts.Regular,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+        }
+    }
+}
+
+@Composable
 private fun YearPickerGrid(
     currentYear: Int,
     columns: Int,
@@ -884,14 +1023,36 @@ private fun YearPickerGrid(
     corner: Dp,
     onYearSelected: (Int) -> Unit,
 ) {
+    var pageCenterYear by remember(currentYear) { mutableStateOf(currentYear) }
+    val pageStep = (rangeYears * 2 + 1).coerceAtLeast(5)
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(background)
             .padding(4.dp)
     ) {
-        val startYear = currentYear - rangeYears
-        val endYear = currentYear + rangeYears
+        val startYear = pageCenterYear - rangeYears
+        val endYear = pageCenterYear + rangeYears
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = { pageCenterYear -= pageStep }) {
+                Text("‹  ${PersianDate.toPersianNumber(startYear - 1)}", color = textColor)
+            }
+            Text(
+                text = "${PersianDate.toPersianNumber(startYear)} — ${PersianDate.toPersianNumber(endYear)}",
+                color = textColor,
+                fontSize = 13.sp,
+                fontFamily = PersianFonts.Regular
+            )
+            TextButton(onClick = { pageCenterYear += pageStep }) {
+                Text("${PersianDate.toPersianNumber(endYear + 1)}  ›", color = textColor)
+            }
+        }
         val years = (startYear..endYear).toList()
         val rows = (years.size + columns - 1) / columns
 
@@ -940,53 +1101,136 @@ private fun PersianDayCell(
     isRangeStart: Boolean,
     isRangeEnd: Boolean,
     isInRange: Boolean,
+    isSingleDayRange: Boolean,
+    connectsToPrevious: Boolean,
+    connectsToNext: Boolean,
+    shimmerIntensity: Float,
     onClick: () -> Unit,
     style: PersianDatePickerStyle,
 ) {
     val selectedColor = style.selectedDayColor
     val todayBg = style.primaryColor.copy(alpha = 0.1f)
+    val selectionBounce = remember { Animatable(1f) }
+    val shouldBounce = isSelected && !isInRange
+    LaunchedEffect(shouldBounce) {
+        if (shouldBounce) {
+            selectionBounce.snapTo(0.9f)
+            selectionBounce.animateTo(1.06f, tween(durationMillis = 90))
+            selectionBounce.animateTo(1f, tween(durationMillis = 150))
+        }
+    }
 
     Box(
         modifier = Modifier
-            .size(style.dayCellSize)
-            .background(
-                color = when {
-                    isRangeStart || isRangeEnd -> selectedColor
-                    isInRange -> style.inRangeColor
-                    isSelected -> selectedColor
-                    isToday -> todayBg
-                    else -> Color.Transparent
-                },
-                shape = when {
-                    isRangeStart || isRangeEnd -> CircleShape
-                    isInRange -> RoundedCornerShape(style.inRangeCornerRadius)
-                    else -> CircleShape
-                }
-            )
-            .run {
-                if (isToday && !isRangeStart && !isRangeEnd && !isSelected) {
-                    border(width = 1.dp, color = style.todayBorderColor, shape = CircleShape)
-                } else this
-            }
-            .clip(CircleShape)
+            .fillMaxWidth()
+            .height(style.dayCellSize)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = rememberRipple(color = style.dayRippleColor)
             ) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = PersianDate.toPersianNumber(date.day),
-            fontSize = style.dayFontSize,
-            fontWeight = if (isSelected || isRangeStart || isRangeEnd) FontWeight.Bold else FontWeight.Normal,
-            color = when {
-                isSelected || isRangeStart || isRangeEnd -> Color.White
-                isToday -> style.dayTodayTextColor
-                else -> style.dayDefaultTextColor
-            },
-            fontFamily = PersianFonts.Regular,
-            style = TextStyle(textDirection = TextDirection.ContentOrRtl)
-        )
+        // The two half-width strips join neighboring cells. Start/End are logical
+        // directions, so the connector also follows RTL layouts correctly.
+        if (connectsToPrevious) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth(0.5f)
+                    .height(style.dayCellSize)
+                    .background(selectedColor)
+            )
+        }
+        if (connectsToNext) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxWidth(0.5f)
+                    .height(style.dayCellSize)
+                    .background(selectedColor)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .size(style.dayCellSize)
+                .graphicsLayer {
+                    scaleX = selectionBounce.value
+                    scaleY = selectionBounce.value
+                }
+                .clip(CircleShape)
+                .background(
+                    color = when {
+                        isSingleDayRange -> Color.Transparent
+                        isRangeStart || isRangeEnd -> selectedColor
+                        isInRange -> selectedColor
+                        isSelected -> selectedColor
+                        isToday -> todayBg
+                        else -> Color.Transparent
+                    },
+                    shape = when {
+                        isRangeStart || isRangeEnd -> CircleShape
+                        isInRange -> RoundedCornerShape(0.dp)
+                        else -> CircleShape
+                    }
+                )
+                .run {
+                    if (isToday && !isRangeStart && !isRangeEnd && !isSelected) {
+                        border(width = 1.dp, color = style.todayBorderColor, shape = CircleShape)
+                    } else this
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            if (isSingleDayRange) {
+                // A split circle communicates that both range endpoints are the
+                // same date without making the cell look like a broken range bar.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.5f)
+                        .background(selectedColor)
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.5f)
+                        .background(selectedColor.copy(alpha = 0.45f))
+                )
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.9f),
+                        start = androidx.compose.ui.geometry.Offset(size.width / 2f, 4.dp.toPx()),
+                        end = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height - 4.dp.toPx()),
+                        strokeWidth = 1.5.dp.toPx(),
+                        cap = StrokeCap.Round,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))
+                    )
+                }
+            }
+            if (shimmerIntensity > 0f) {
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.38f * shimmerIntensity),
+                        radius = size.minDimension * (0.32f + 0.18f * shimmerIntensity),
+                        center = center
+                    )
+                }
+            }
+            Text(
+                text = PersianDate.toPersianNumber(date.day),
+                fontSize = style.dayFontSize,
+                fontWeight = if (isSelected || isRangeStart || isRangeEnd) FontWeight.Bold else FontWeight.Normal,
+                color = when {
+                    isSelected || isRangeStart || isRangeEnd -> Color.White
+                    isToday -> style.dayTodayTextColor
+                    else -> style.dayDefaultTextColor
+                },
+                fontFamily = PersianFonts.Regular,
+                style = TextStyle(textDirection = TextDirection.ContentOrRtl)
+            )
+        }
     }
 }
 

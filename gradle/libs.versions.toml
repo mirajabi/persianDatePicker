@@ -9,7 +9,7 @@ lifecycleRuntimeKtx = "2.9.1"
 activityCompose = "1.10.1"
 composeBom = "2024.04.01"
 cardview = "1.0.0"
-persiandatepicker = "v1.0.0"
+persiandatepicker = "v1.1.0"
 
 
 

@@ -13,6 +13,9 @@ Keywords: Android Persian DatePicker, Jalali Calendar, Jetpack Compose Date Pick
 - Builder-based config (size/sizeFraction, margins, paddings, dismiss behavior)
 - Today button with custom text/callback and calendar auto-navigation
 - Optional Year Picker (columns, range years, colors, corner radius)
+- Fast month selection and paginated navigation across distant years
+- Connected range highlighting with bounce feedback and a traveling light animation
+- Special split-circle indicator when range start and end are the same day
 - Selection summary footer and RTL-aware typography
 
 ## Installation (JitPack)
@@ -28,7 +31,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.Miaadrajabi:persianDatePicker:v1.0.0")
+    implementation("com.github.Miaadrajabi:persianDatePicker:v1.1.0")
 }
 ```
 
@@ -41,14 +44,14 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.github.Miaadrajabi:persianDatePicker:v1.0.0'
+    implementation 'com.github.Miaadrajabi:persianDatePicker:v1.1.0'
 }
 ```
 
 Version Catalog (optional):
 ```toml
 [libraries]
-persian-datepicker = { module = "com.github.Miaadrajabi:persianDatePicker", version = "v1.0.0" }
+persian-datepicker = { module = "com.github.Miaadrajabi:persianDatePicker", version = "v1.1.0" }
 ```
 ```kotlin
 dependencies { implementation(libs.persian.datepicker) }
@@ -77,6 +80,8 @@ PersianDatePicker(
         .multipleTitle("انتخاب چند تاریخ")
         .rangeTitle("انتخاب بازه تاریخ")
         .enableYearPicker(true)
+        // false (default): run once after range selection; true: repeat continuously
+        .repeatRangeLightAnimation(false)
         .showSelectionSummaryFooter(true)
         .build(),
     onDismiss = { show = false },
@@ -134,6 +139,10 @@ PersianDatePicker(
   - Multiple: `.initialSelectedDates(setOf(date1, date2))`
 - How do I enable the Year Picker?
   - `.enableYearPicker(true)` and customize via `PersianDatePickerStyle` (columns, colors, radius).
+- How do I repeat the range light animation?
+  - Use `.repeatRangeLightAnimation(true)`. It runs once by default.
+- How do I quickly select a month or a distant year?
+  - Tap the month or year label above the calendar. The year picker includes previous/next range controls.
 - What is the minimum SDK?
   - minSdk 21.
 
